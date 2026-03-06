@@ -1,5 +1,5 @@
 services:
-  dbCentral:
+  databasecentral:
     image: postgres:16.2-alpine
     container_name: postgres_db_central
     restart: always
@@ -10,24 +10,24 @@ services:
     ports:
       - "5432:5432"
     depends_on:
-      - dbSur
-      - dbNorte
+      - databasesur
+      - databasenorte
     volumes:
       - postgres_storage_central:/var/lib/postgresql/data
     networks:
       databases:
         aliases:
-          - databaseCentral
+          - databasecentral
       regionCentral:
         aliases:
-          - databaseCentral
+          - databasecentral
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d logistica"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  dbSur:
+  databasesur:
     image: postgres:16.2-alpine
     container_name: postgres_db_sur
     restart: always
@@ -42,17 +42,17 @@ services:
     networks:
       databases:
         aliases:
-          - databaseSur
+          - databasesur
       regionSur:
         aliases:
-          - databaseSur
+          - databasesur
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d logistica"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  dbNorte:
+  databasenorte:
     image: postgres:16.2-alpine
     container_name: postgres_db_norte
     restart: always
@@ -67,59 +67,65 @@ services:
     networks:
       databases:
         aliases:
-          - databaseNorte
+          - databasenorte
       regionNorte:
         aliases:
-          - databaseNorte
+          - databasenorte
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d logistica"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  serverCentral:
-    build: ./serverCentral
-    container_name: server_central
-    restart: always
-    ports:
-      - "3000:3000"
-    depends_on:
-      dbCentral:
-        condition: service_healthy
-    networks:
-      regionCentral:
-        aliases:
-          - serverCentral
+  # servercentral:
+  #   build: ./serverCentral
+  #   container_name: server_central
+  #   restart: always
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     databasecentral:
+  #       condition: service_healthy
+  #     brokercentral:
+  #       condition: service_healthy
+  #   networks:
+  #     regionCentral:
+  #       aliases:
+  #         - servercentral
 
-  serverSur:
-    build: ./serverSur
-    container_name: server_sur
-    restart: always
-    ports:
-      - "3001:3000"
-    depends_on:
-      dbSur:
-        condition: service_healthy
-    networks:
-      regionSur:
-        aliases:
-          - serverSur
+  # serversur:
+  #   build: ./serverSur
+  #   container_name: server_sur
+  #   restart: always
+  #   ports:
+  #     - "3001:3000"
+  #   depends_on:
+  #     databasesur:
+  #       condition: service_healthy
+  #     brokersur:
+  #       condition: service_healthy
+  #   networks:
+  #     regionSur:
+  #       aliases:
+  #         - serversur
   
-  serverNorte:
-    build: ./serverNorte
-    container_name: server_norte
-    restart: always
-    ports:
-      - "3002:3000"
-    depends_on:
-      dbNorte:
-        condition: service_healthy
-    networks:
-      regionNorte:
-        aliases:
-          - serverNorte
+  # servernorte:
+  #   build: ./serverNorte
+  #   container_name: server_norte
+  #   restart: always
+  #   ports:
+  #     - "3002:3000"
+  #   depends_on:
+  #     databasenorte:
+  #       condition: service_healthy
+  #     brokernorte:
+  #       condition: service_healthy
+  #   networks:
+  #     regionNorte:
+  #       aliases:
+  #         - servernorte
   
-  mosquittoCentral:
+  brokercentral:
     image: eclipse-mosquitto:2.0.18
     container_name: broker-mosquitto-central
     ports:
@@ -129,9 +135,14 @@ services:
     networks:
       regionCentral:
         aliases:
-          - brokerCentral
+          - brokercentral
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/broker/version' -C 1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  mosquittoSur:
+  brokersur:
     image: eclipse-mosquitto:2.0.18
     container_name: broker-mosquitto-sur
     ports:
@@ -141,9 +152,14 @@ services:
     networks:
       regionSur:
         aliases:
-          - brokerSur
+          - brokersur
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/broker/version' -C 1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  mosquittoNorte:
+  brokernorte:
     image: eclipse-mosquitto:2.0.18
     container_name: broker-mosquitto-norte
     ports:
@@ -153,7 +169,12 @@ services:
     networks:
       regionNorte:
         aliases:
-          - brokerNorte
+          - brokernorte
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/broker/version' -C 1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_storage_central:
