@@ -1,0 +1,175 @@
+services:
+  dbCentral:
+    image: postgres:16.2-alpine
+    container_name: postgres_db_central
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456789
+      POSTGRES_DB: logistica
+    ports:
+      - "5432:5432"
+    depends_on:
+      - dbSur
+      - dbNorte
+    volumes:
+      - postgres_storage_central:/var/lib/postgresql/data
+    networks:
+      databases:
+        aliases:
+          - databaseCentral
+      regionCentral:
+        aliases:
+          - databaseCentral
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d logistica"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  dbSur:
+    image: postgres:16.2-alpine
+    container_name: postgres_db_sur
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456789
+      POSTGRES_DB: logistica
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_storage_sur:/var/lib/postgresql/data
+    networks:
+      databases:
+        aliases:
+          - databaseSur
+      regionSur:
+        aliases:
+          - databaseSur
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d logistica"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  dbNorte:
+    image: postgres:16.2-alpine
+    container_name: postgres_db_norte
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456789
+      POSTGRES_DB: logistica
+    ports:
+      - "5434:5432" # Puerto host modificado
+    volumes:
+      - postgres_storage_norte:/var/lib/postgresql/data
+    networks:
+      databases:
+        aliases:
+          - databaseNorte
+      regionNorte:
+        aliases:
+          - databaseNorte
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d logistica"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  serverCentral:
+    build: ./serverCentral
+    container_name: server_central
+    restart: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      dbCentral:
+        condition: service_healthy
+    networks:
+      regionCentral:
+        aliases:
+          - serverCentral
+
+  serverSur:
+    build: ./serverSur
+    container_name: server_sur
+    restart: always
+    ports:
+      - "3001:3000"
+    depends_on:
+      dbSur:
+        condition: service_healthy
+    networks:
+      regionSur:
+        aliases:
+          - serverSur
+  
+  serverNorte:
+    build: ./serverNorte
+    container_name: server_norte
+    restart: always
+    ports:
+      - "3002:3000"
+    depends_on:
+      dbNorte:
+        condition: service_healthy
+    networks:
+      regionNorte:
+        aliases:
+          - serverNorte
+  
+  mosquittoCentral:
+    image: eclipse-mosquitto:2.0.18
+    container_name: broker-mosquitto-central
+    ports:
+      - "1881:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+    networks:
+      regionCentral:
+        aliases:
+          - brokerCentral
+
+  mosquittoSur:
+    image: eclipse-mosquitto:2.0.18
+    container_name: broker-mosquitto-sur
+    ports:
+      - "1882:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+    networks:
+      regionSur:
+        aliases:
+          - brokerSur
+
+  mosquittoNorte:
+    image: eclipse-mosquitto:2.0.18
+    container_name: broker-mosquitto-norte
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+    networks:
+      regionNorte:
+        aliases:
+          - brokerNorte
+
+volumes:
+  postgres_storage_central:
+  postgres_storage_sur:
+  postgres_storage_norte:
+
+networks: 
+  regionSur:
+    name: regionSur
+    driver: bridge
+  regionNorte:
+    name: regionNorte
+    driver: bridge
+  regionCentral:
+    name: regionCentral
+    driver: bridge
+  databases:
+    name: databases
+    driver: bridge
