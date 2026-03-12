@@ -6,7 +6,8 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 123456789
-      POSTGRES_DB: logistica
+      POSTGRES_DB: central
+    command: postgres -c wal_level=logical
     ports:
       - "5432:5432"
     depends_on:
@@ -34,7 +35,8 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 123456789
-      POSTGRES_DB: logistica
+      POSTGRES_DB: sur
+    command: postgres -c wal_level=logical
     ports:
       - "5433:5432"
     volumes:
@@ -59,7 +61,8 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 123456789
-      POSTGRES_DB: logistica
+      POSTGRES_DB: norte
+    command: postgres -c wal_level=logical
     ports:
       - "5434:5432" # Puerto host modificado
     volumes:
