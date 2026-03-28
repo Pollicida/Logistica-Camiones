@@ -17,11 +17,14 @@ RUN npm ci
 # 5. Copiar el resto del código fuente al contenedor
 COPY . .
 
-# 6. Exponer el puerto en el que escucha tu servidor (el docker-compose espera el 3000)
+# 6. Compilar TypeScript a JavaScript
+RUN npm run build
+
+# 7. Exponer el puerto en el que escucha tu servidor (el docker-compose espera el 3000)
 EXPOSE 3000
 
-# 7. (Opcional pero recomendado por seguridad) Usar el usuario 'node' sin privilegios root
+# 8. (Opcional pero recomendado por seguridad) Usar el usuario 'node' sin privilegios root
 USER node
 
-# 8. Comando para iniciar la aplicación (cambia 'index.js' por tu archivo principal, ej. 'app.js' o 'server.js')
-CMD ["node", "index.js"]
+# 9. Comando para iniciar la aplicación (apunta al archivo compilado en dist/)
+CMD ["node", "dist/main.js"]

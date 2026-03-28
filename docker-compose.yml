@@ -1,29 +1,36 @@
-# services:
 services:
-  # --- CAPA DE ALMACENAMIENTO (COCKROACHDB) ---
+  # ==========================================
+  # CAPA DE ALMACENAMIENTO (COCKROACHDB)
+  # ==========================================
   roach1:
     image: cockroachdb/cockroach:v23.1.10
     command: start --insecure --join=roach1,roach2,roach3 --listen-addr=roach1:26257 --advertise-addr=roach1:26257
     ports:
-      - "8080:8080" # Consola Web en el puerto 8080
+      - "8080:8080"
     volumes:
       - roach1_data:/cockroach/cockroach-data
+    networks:
+      - cluster_db
 
   roach2:
     image: cockroachdb/cockroach:v23.1.10
     command: start --insecure --join=roach1,roach2,roach3 --listen-addr=roach2:26257 --advertise-addr=roach2:26257
     ports:
-      - "8081:8080" # Consola Web en el puerto 8081 (opcional, para ver el nodo 2 directamente)
+      - "8081:8080"
     volumes:
       - roach2_data:/cockroach/cockroach-data
+    networks:
+      - cluster_db
 
   roach3:
     image: cockroachdb/cockroach:v23.1.10
     command: start --insecure --join=roach1,roach2,roach3 --listen-addr=roach3:26257 --advertise-addr=roach3:26257
     ports:
-      - "8082:8080" # Consola Web en el puerto 8082
+      - "8082:8080"
     volumes:
       - roach3_data:/cockroach/cockroach-data
+    networks:
+      - cluster_db
 
   init:
     image: cockroachdb/cockroach:v23.1.10
@@ -32,153 +39,189 @@ services:
       - roach1
       - roach2
       - roach3
+    networks:
+      - cluster_db
 
-  # --- CAPA DE RED (BALANCEADORES HAPROXY) ---
+  # ==========================================
+  # CAPA DE RED (BALANCEADORES HAPROXY)
+  # ==========================================
   lb_norte:
     image: haproxy:2.8-alpine
     ports:
-      - "26001:26257" # Tu Node.js del Norte se conectará al localhost:26001
+      - "26001:26257"
     volumes:
       - ./haproxy-norte.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     depends_on:
       - roach1
       - roach2
       - roach3
+    networks:
+      - cluster_db
+      - regionNorte # Puente hacia la región Norte
 
   lb_centro:
     image: haproxy:2.8-alpine
     ports:
-      - "26002:26257" # Tu Node.js del Centro se conectará al localhost:26002
+      - "26002:26257"
     volumes:
       - ./haproxy-centro.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     depends_on:
       - roach1
       - roach2
       - roach3
+    networks:
+      - cluster_db
+      - regionCentral # Puente hacia la región Centro
 
   lb_sur:
     image: haproxy:2.8-alpine
     ports:
-      - "26003:26257" # Tu Node.js del Sur se conectará al localhost:26003
+      - "26003:26257"
     volumes:
       - ./haproxy-sur.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     depends_on:
       - roach1
       - roach2
       - roach3
+    networks:
+      - cluster_db
+      - regionSur # Puente hacia la región Sur
 
+  # ==========================================
+  # CAPA DE INGESTA (BROKERS MQTT)
+  # ==========================================
+  brokernorte:
+    image: eclipse-mosquitto:2.0.18
+    container_name: broker-mosquitto-norte
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+    networks:
+      - regionNorte
+    healthcheck:
+      # Usa netcat (nc) para intentar abrir una conexión TCP rápida al puerto 1883
+      test: ["CMD", "nc", "-z", "localhost", "1883"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  brokercentro:
+    image: eclipse-mosquitto:2.0.18
+    container_name: broker-mosquitto-centro
+    ports:
+      - "1884:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+    networks:
+      - regionCentral
+    healthcheck:
+      # Usa netcat (nc) para intentar abrir una conexión TCP rápida al puerto 1883
+      test: ["CMD", "nc", "-z", "localhost", "1883"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  brokersur:
+    image: eclipse-mosquitto:2.0.18
+    container_name: broker-mosquitto-sur
+    ports:
+      - "1885:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+    networks:
+      - regionSur
+    healthcheck:
+      # Usa netcat (nc) para intentar abrir una conexión TCP rápida al puerto 1883
+      test: ["CMD", "nc", "-z", "localhost", "1883"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  # ==========================================
+  # CAPA DE SERVICIOS (SERVIDORES NODE.JS)
+  # ==========================================
+  api_norte:
+    build: 
+      context: ./backend-logistica # Todos usan el mismo código
+    container_name: server_norte
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - DATABASE_URL=postgresql://root@lb_norte:26257/logistica_flotilla?sslmode=disable
+      - MQTT_BROKER_URL=mqtt://brokernorte:1883
+      - REGION_ID=NORTE
+    volumes:
+      - ./backend-logistica/src:/usr/src/app/src
+    depends_on:
+      lb_norte:
+        condition: service_started
+      brokernorte:
+        condition: service_healthy
+    networks:
+      - regionNorte
+
+  # api_centro:
+  #   build: 
+  #     context: ./backend-logistica
+  #   container_name: server_central
+  #   ports:
+  #     - "3001:3000" # Exponemos el 3001 a tu compu, pero adentro corre en el 3000
+  #   environment:
+  #     - PORT=3000
+  #     - DATABASE_URL=postgresql://root@lb_centro:26257/logistica_flotilla?sslmode=disable
+  #     - MQTT_BROKER_URL=mqtt://brokercentro:1883
+  #     - REGION_ID=CENTRO
+  #   volumes:
+  #     - ./backend-logistica/src:/usr/src/app/src
+  #   depends_on:
+  #     lb_centro:
+  #       condition: service_started
+  #     brokercentro:
+  #       condition: service_healthy
+  #   networks:
+  #     - regionCentral
+
+  # api_sur:
+  #   build: 
+  #     context: ./backend-logistica
+  #   container_name: server_sur
+  #   ports:
+  #     - "3002:3000" # Exponemos el 3002 a tu compu
+  #   environment:
+  #     - PORT=3000
+  #     - DATABASE_URL=postgresql://root@lb_sur:26257/logistica_flotilla?sslmode=disable
+  #     - MQTT_BROKER_URL=mqtt://brokersur:1883
+  #     - REGION_ID=SUR
+  #   volumes:
+  #     - ./backend-logistica/src:/usr/src/app/src
+  #   depends_on:
+  #     lb_sur:
+  #       condition: service_started
+  #     brokersur:
+  #       condition: service_healthy
+  #   networks:
+  #     - regionSur
+
+# ==========================================
+# DEFINICIÓN DE VOLÚMENES Y REDES
+# ==========================================
 volumes:
   roach1_data:
   roach2_data:
   roach3_data:
-  
 
-  # servercentral:
-  #   build: ./serverCentral
-  #   container_name: server_central
-  #   restart: always
-  #   ports:
-  #     - "3000:3000"
-  #   depends_on:
-  #     databasecentral:
-  #       condition: service_healthy
-  #     brokercentral:
-  #       condition: service_healthy
-  #   networks:
-  #     regionCentral:
-  #       aliases:
-  #         - servercentral
-
-  # serversur:
-  #   build: ./serverSur
-  #   container_name: server_sur
-  #   restart: always
-  #   ports:
-  #     - "3001:3000"
-  #   depends_on:
-  #     databasesur:
-  #       condition: service_healthy
-  #     brokersur:
-  #       condition: service_healthy
-  #   networks:
-  #     regionSur:
-  #       aliases:
-  #         - serversur
-  
-  # servernorte:
-  #   build: ./serverNorte
-  #   container_name: server_norte
-  #   restart: always
-  #   ports:
-  #     - "3002:3000"
-  #   depends_on:
-  #     databasenorte:
-  #       condition: service_healthy
-  #     brokernorte:
-  #       condition: service_healthy
-  #   networks:
-  #     regionNorte:
-  #       aliases:
-  #         - servernorte
-  
-  # brokercentral:
-  #   image: eclipse-mosquitto:2.0.18
-  #   container_name: broker-mosquitto-central
-  #   ports:
-  #     - "1881:1883"
-  #   volumes:
-  #     - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
-  #   networks:
-  #     regionCentral:
-  #       aliases:
-  #         - brokercentral
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/broker/version' -C 1 || exit 1"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-
-  # brokersur:
-  #   image: eclipse-mosquitto:2.0.18
-  #   container_name: broker-mosquitto-sur
-  #   ports:
-  #     - "1882:1883"
-  #   volumes:
-  #     - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
-  #   networks:
-  #     regionSur:
-  #       aliases:
-  #         - brokersur
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/broker/version' -C 1 || exit 1"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-
-  # brokernorte:
-  #   image: eclipse-mosquitto:2.0.18
-  #   container_name: broker-mosquitto-norte
-  #   ports:
-  #     - "1883:1883"
-  #   volumes:
-  #     - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
-  #   networks:
-  #     regionNorte:
-  #       aliases:
-  #         - brokernorte
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/broker/version' -C 1 || exit 1"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-
-networks: 
-  regionSur:
-    name: regionSur
+networks:
+  cluster_db:
+    name: cluster_db
     driver: bridge
   regionNorte:
     name: regionNorte
     driver: bridge
   regionCentral:
     name: regionCentral
+    driver: bridge
+  regionSur:
+    name: regionSur
     driver: bridge
