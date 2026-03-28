@@ -1,84 +1,77 @@
+# services:
 services:
-  databasecentral:
-    image: postgres:16.2-alpine
-    container_name: postgres_db_central
-    restart: always
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 123456789
-      POSTGRES_DB: central
-    command: postgres -c wal_level=logical
+  # --- CAPA DE ALMACENAMIENTO (COCKROACHDB) ---
+  roach1:
+    image: cockroachdb/cockroach:v23.1.10
+    command: start --insecure --join=roach1,roach2,roach3 --listen-addr=roach1:26257 --advertise-addr=roach1:26257
     ports:
-      - "5432:5432"
+      - "8080:8080" # Consola Web en el puerto 8080
+    volumes:
+      - roach1_data:/cockroach/cockroach-data
+
+  roach2:
+    image: cockroachdb/cockroach:v23.1.10
+    command: start --insecure --join=roach1,roach2,roach3 --listen-addr=roach2:26257 --advertise-addr=roach2:26257
+    ports:
+      - "8081:8080" # Consola Web en el puerto 8081 (opcional, para ver el nodo 2 directamente)
+    volumes:
+      - roach2_data:/cockroach/cockroach-data
+
+  roach3:
+    image: cockroachdb/cockroach:v23.1.10
+    command: start --insecure --join=roach1,roach2,roach3 --listen-addr=roach3:26257 --advertise-addr=roach3:26257
+    ports:
+      - "8082:8080" # Consola Web en el puerto 8082
+    volumes:
+      - roach3_data:/cockroach/cockroach-data
+
+  init:
+    image: cockroachdb/cockroach:v23.1.10
+    command: init --insecure --host=roach1:26257
     depends_on:
-      - databasesur
-      - databasenorte
-    volumes:
-      - postgres_storage_central:/var/lib/postgresql/data
-    networks:
-      databases:
-        aliases:
-          - databasecentral
-      regionCentral:
-        aliases:
-          - databasecentral
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d logistica"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - roach1
+      - roach2
+      - roach3
 
-  databasesur:
-    image: postgres:16.2-alpine
-    container_name: postgres_db_sur
-    restart: always
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 123456789
-      POSTGRES_DB: sur
-    command: postgres -c wal_level=logical
+  # --- CAPA DE RED (BALANCEADORES HAPROXY) ---
+  lb_norte:
+    image: haproxy:2.8-alpine
     ports:
-      - "5433:5432"
+      - "26001:26257" # Tu Node.js del Norte se conectará al localhost:26001
     volumes:
-      - postgres_storage_sur:/var/lib/postgresql/data
-    networks:
-      databases:
-        aliases:
-          - databasesur
-      regionSur:
-        aliases:
-          - databasesur
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d logistica"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - ./haproxy-norte.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - roach1
+      - roach2
+      - roach3
 
-  databasenorte:
-    image: postgres:16.2-alpine
-    container_name: postgres_db_norte
-    restart: always
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 123456789
-      POSTGRES_DB: norte
-    command: postgres -c wal_level=logical
+  lb_centro:
+    image: haproxy:2.8-alpine
     ports:
-      - "5434:5432" # Puerto host modificado
+      - "26002:26257" # Tu Node.js del Centro se conectará al localhost:26002
     volumes:
-      - postgres_storage_norte:/var/lib/postgresql/data
-    networks:
-      databases:
-        aliases:
-          - databasenorte
-      regionNorte:
-        aliases:
-          - databasenorte
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d logistica"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - ./haproxy-centro.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - roach1
+      - roach2
+      - roach3
+
+  lb_sur:
+    image: haproxy:2.8-alpine
+    ports:
+      - "26003:26257" # Tu Node.js del Sur se conectará al localhost:26003
+    volumes:
+      - ./haproxy-sur.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - roach1
+      - roach2
+      - roach3
+
+volumes:
+  roach1_data:
+  roach2_data:
+  roach3_data:
+  
 
   # servercentral:
   #   build: ./serverCentral
@@ -128,61 +121,56 @@ services:
   #       aliases:
   #         - servernorte
   
-  brokercentral:
-    image: eclipse-mosquitto:2.0.18
-    container_name: broker-mosquitto-central
-    ports:
-      - "1881:1883"
-    volumes:
-      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
-    networks:
-      regionCentral:
-        aliases:
-          - brokercentral
-    healthcheck:
-      test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/broker/version' -C 1 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  # brokercentral:
+  #   image: eclipse-mosquitto:2.0.18
+  #   container_name: broker-mosquitto-central
+  #   ports:
+  #     - "1881:1883"
+  #   volumes:
+  #     - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+  #   networks:
+  #     regionCentral:
+  #       aliases:
+  #         - brokercentral
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/broker/version' -C 1 || exit 1"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
 
-  brokersur:
-    image: eclipse-mosquitto:2.0.18
-    container_name: broker-mosquitto-sur
-    ports:
-      - "1882:1883"
-    volumes:
-      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
-    networks:
-      regionSur:
-        aliases:
-          - brokersur
-    healthcheck:
-      test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/broker/version' -C 1 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  # brokersur:
+  #   image: eclipse-mosquitto:2.0.18
+  #   container_name: broker-mosquitto-sur
+  #   ports:
+  #     - "1882:1883"
+  #   volumes:
+  #     - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+  #   networks:
+  #     regionSur:
+  #       aliases:
+  #         - brokersur
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/broker/version' -C 1 || exit 1"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
 
-  brokernorte:
-    image: eclipse-mosquitto:2.0.18
-    container_name: broker-mosquitto-norte
-    ports:
-      - "1883:1883"
-    volumes:
-      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
-    networks:
-      regionNorte:
-        aliases:
-          - brokernorte
-    healthcheck:
-      test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/broker/version' -C 1 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  postgres_storage_central:
-  postgres_storage_sur:
-  postgres_storage_norte:
+  # brokernorte:
+  #   image: eclipse-mosquitto:2.0.18
+  #   container_name: broker-mosquitto-norte
+  #   ports:
+  #     - "1883:1883"
+  #   volumes:
+  #     - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+  #   networks:
+  #     regionNorte:
+  #       aliases:
+  #         - brokernorte
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/broker/version' -C 1 || exit 1"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
 
 networks: 
   regionSur:
@@ -193,7 +181,4 @@ networks:
     driver: bridge
   regionCentral:
     name: regionCentral
-    driver: bridge
-  databases:
-    name: databases
     driver: bridge
