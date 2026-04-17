@@ -1,0 +1,115 @@
+---
+title: Arquitectura Docker Compose - Sistema Logístico Distribuido
+---
+flowchart TB
+    %% ============ CLIENTES EXTERNOS ============
+    subgraph HOST["HOST (Máquina Física / Puertos expuestos)"]
+        direction LR
+        Client["Clientes HTTP<br/>(Frontend / Postman)"]
+        IoT["Flotilla de Camiones<br/>(Publicadores MQTT)"]
+        DBAdmin["DB Admin UI<br/>:8080 / :8081 / :8082"]
+    end
+
+    %% ============ CAPA DE SERVICIOS ============
+    subgraph SVC["CAPA DE SERVICIOS - Node.js / Express / TypeORM"]
+        direction LR
+        ApiN["api_norte<br/>server_norte<br/>:3000 ACTIVA<br/>REGION_ID=NORTE"]
+        ApiC["api_centro<br/>server_central<br/>:3001 COMENTADA<br/>REGION_ID=CENTRO"]:::disabled
+        ApiS["api_sur<br/>server_sur<br/>:3002 COMENTADA<br/>REGION_ID=SUR"]:::disabled
+    end
+
+    %% ============ CAPA DE INGESTA MQTT ============
+    subgraph MQTT["CAPA DE INGESTA - Eclipse Mosquitto 2.0.18"]
+        direction LR
+        BrokerN["brokernorte<br/>broker-mosquitto-norte<br/>:1883 (host) → :1883"]
+        BrokerC["brokercentro<br/>broker-mosquitto-centro<br/>:1884 (host) → :1883"]
+        BrokerS["brokersur<br/>broker-mosquitto-sur<br/>:1885 (host) → :1883"]
+    end
+
+    %% ============ CAPA DE RED / LOAD BALANCERS ============
+    subgraph LB["CAPA DE RED - HAProxy 2.8-alpine"]
+        direction LR
+        LbN["lb_norte<br/>:26001 → :26257<br/>haproxy-norte.cfg"]
+        LbC["lb_centro<br/>:26002 → :26257<br/>haproxy-centro.cfg"]
+        LbS["lb_sur<br/>:26003 → :26257<br/>haproxy-sur.cfg"]
+    end
+
+    %% ============ CAPA DE ALMACENAMIENTO ============
+    subgraph DB["CAPA DE ALMACENAMIENTO - CockroachDB v23.1.10 (PostGIS)"]
+        direction LR
+        Roach1["roach1<br/>:26257<br/>Admin UI :8080"]
+        Roach2["roach2<br/>:26257<br/>Admin UI :8081"]
+        Roach3["roach3<br/>:26257<br/>Admin UI :8082"]
+        Init["init (job)<br/>cockroach init<br/>--host=roach1"]:::job
+    end
+
+    %% ============ VOLÚMENES ============
+    subgraph VOL["VOLÚMENES DOCKER (persistencia)"]
+        direction LR
+        V1[("roach1_data")]
+        V2[("roach2_data")]
+        V3[("roach3_data")]
+    end
+
+    %% ============ REDES ============
+    subgraph NET["REDES BRIDGE"]
+        direction LR
+        NetN(["regionNorte"]):::net
+        NetC(["regionCentral"]):::net
+        NetS(["regionSur"]):::net
+        NetDB(["cluster_db<br/>(gossip intra-cluster)"]):::net
+    end
+
+    %% ============ CONEXIONES: CLIENTES → API ============
+    Client -->|HTTP :3000| ApiN
+    IoT -->|MQTT publish :1883| BrokerN
+    IoT -.->|MQTT :1884| BrokerC
+    IoT -.->|MQTT :1885| BrokerS
+    DBAdmin -->|HTTP| Roach1
+    DBAdmin -->|HTTP| Roach2
+    DBAdmin -->|HTTP| Roach3
+
+    %% ============ CONEXIONES: API → MQTT ============
+    ApiN -->|subscribe<br/>mqtt://brokernorte:1883| BrokerN
+    ApiC -.->|mqtt://brokercentro:1883| BrokerC
+    ApiS -.->|mqtt://brokersur:1883| BrokerS
+
+    %% ============ CONEXIONES: API → HAProxy ============
+    ApiN -->|SQL PG<br/>postgresql://lb_norte:26257| LbN
+    ApiC -.->|postgresql://lb_centro:26257| LbC
+    ApiS -.->|postgresql://lb_sur:26257| LbS
+
+    %% ============ CONEXIONES: HAProxy → CockroachDB ============
+    LbN --> Roach1
+    LbN --> Roach2
+    LbN --> Roach3
+    LbC --> Roach1
+    LbC --> Roach2
+    LbC --> Roach3
+    LbS --> Roach1
+    LbS --> Roach2
+    LbS --> Roach3
+
+    %% ============ CLUSTER DB GOSSIP ============
+    Roach1 <-->|join| Roach2
+    Roach2 <-->|join| Roach3
+    Roach1 <-->|join| Roach3
+    Init -.->|bootstrap cluster| Roach1
+
+    %% ============ VOLÚMENES ============
+    Roach1 --- V1
+    Roach2 --- V2
+    Roach3 --- V3
+
+    %% ============ ESTILOS ============
+    classDef disabled stroke-dasharray: 5 5,fill:#f5f5f5,color:#888,stroke:#999
+    classDef job fill:#fff4e0,stroke:#e0a030,color:#704000
+    classDef net fill:#e7f0ff,stroke:#3366cc,color:#1a3a8a
+
+    style HOST fill:#fafafa,stroke:#888
+    style SVC fill:#e8f5e9,stroke:#2e7d32
+    style MQTT fill:#fff3e0,stroke:#ef6c00
+    style LB fill:#fce4ec,stroke:#c2185b
+    style DB fill:#e3f2fd,stroke:#1565c0
+    style VOL fill:#f3e5f5,stroke:#6a1b9a
+    style NET fill:#eceff1,stroke:#455a64

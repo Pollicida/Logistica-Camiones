@@ -152,6 +152,7 @@ services:
       - DATABASE_URL=postgresql://root@lb_norte:26257/logistica_flotilla?sslmode=disable
       - MQTT_BROKER_URL=mqtt://brokernorte:1883
       - REGION_ID=NORTE
+      - JWT_SECRET=complex_secret_key_for_jwt_logistic_system
     volumes:
       - ./backend-logistica/src:/usr/src/app/src
     depends_on:
@@ -173,6 +174,7 @@ services:
   #     - DATABASE_URL=postgresql://root@lb_centro:26257/logistica_flotilla?sslmode=disable
   #     - MQTT_BROKER_URL=mqtt://brokercentro:1883
   #     - REGION_ID=CENTRO
+  #     - JWT_SECRET=complex_secret_key_for_jwt_logistic_system
   #   volumes:
   #     - ./backend-logistica/src:/usr/src/app/src
   #   depends_on:
@@ -194,6 +196,7 @@ services:
   #     - DATABASE_URL=postgresql://root@lb_sur:26257/logistica_flotilla?sslmode=disable
   #     - MQTT_BROKER_URL=mqtt://brokersur:1883
   #     - REGION_ID=SUR
+  #     - JWT_SECRET=complex_secret_key_for_jwt_logistic_system
   #   volumes:
   #     - ./backend-logistica/src:/usr/src/app/src
   #   depends_on:

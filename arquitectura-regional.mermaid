@@ -1,0 +1,132 @@
+---
+title: Despliegue Regional - docker-compose dividido en 4 stacks
+---
+flowchart TB
+    %% ================================================
+    %% STACK BASE: CLUSTER COMPARTIDO
+    %% ================================================
+    subgraph CLUSTER["STACK 1 · logistica-cluster (docker-compose.cluster.yml)"]
+        direction TB
+        subgraph NETDB["red: cluster_db (bridge, external para regiones)"]
+            direction LR
+            R1["roach1<br/>:26257 · UI :8080"]
+            R2["roach2<br/>:26257 · UI :8081"]
+            R3["roach3<br/>:26257 · UI :8082"]
+            INIT["init<br/>cockroach init (one-shot)"]:::job
+        end
+        V1[("roach1_data")]:::vol
+        V2[("roach2_data")]:::vol
+        V3[("roach3_data")]:::vol
+        R1 --- V1
+        R2 --- V2
+        R3 --- V3
+        R1 <--> R2
+        R2 <--> R3
+        R1 <--> R3
+        INIT -.bootstrap.-> R1
+    end
+
+    %% ================================================
+    %% STACK REGIONAL NORTE
+    %% ================================================
+    subgraph NORTE["STACK 2 · logistica-norte (docker-compose.norte.yml)"]
+        direction TB
+        subgraph NETN["red: regionNorte (bridge)"]
+            direction LR
+            ApiN["api_norte<br/>server_norte<br/>host:3000 → :3000<br/>REGION_ID=NORTE"]:::api
+            BrokN["brokernorte<br/>host:1883 → :1883<br/>healthcheck nc -z"]:::mqtt
+        end
+        LbN["lb_norte<br/>host:26001 → :26257<br/>haproxy-norte.cfg"]:::lb
+        ApiN --> LbN
+        ApiN --> BrokN
+        LbN -. cluster_db .-> R1
+        LbN -. cluster_db .-> R2
+        LbN -. cluster_db .-> R3
+    end
+
+    %% ================================================
+    %% STACK REGIONAL CENTRO
+    %% ================================================
+    subgraph CENTRO["STACK 3 · logistica-centro (docker-compose.centro.yml)"]
+        direction TB
+        subgraph NETC["red: regionCentral (bridge)"]
+            direction LR
+            ApiC["api_centro<br/>server_central<br/>host:3001 → :3000<br/>REGION_ID=CENTRO"]:::api
+            BrokC["brokercentro<br/>host:1884 → :1883<br/>healthcheck nc -z"]:::mqtt
+        end
+        LbC["lb_centro<br/>host:26002 → :26257<br/>haproxy-centro.cfg"]:::lb
+        ApiC --> LbC
+        ApiC --> BrokC
+        LbC -. cluster_db .-> R1
+        LbC -. cluster_db .-> R2
+        LbC -. cluster_db .-> R3
+    end
+
+    %% ================================================
+    %% STACK REGIONAL SUR
+    %% ================================================
+    subgraph SUR["STACK 4 · logistica-sur (docker-compose.sur.yml)"]
+        direction TB
+        subgraph NETS["red: regionSur (bridge)"]
+            direction LR
+            ApiS["api_sur<br/>server_sur<br/>host:3002 → :3000<br/>REGION_ID=SUR"]:::api
+            BrokS["brokersur<br/>host:1885 → :1883<br/>healthcheck nc -z"]:::mqtt
+        end
+        LbS["lb_sur<br/>host:26003 → :26257<br/>haproxy-sur.cfg"]:::lb
+        ApiS --> LbS
+        ApiS --> BrokS
+        LbS -. cluster_db .-> R1
+        LbS -. cluster_db .-> R2
+        LbS -. cluster_db .-> R3
+    end
+
+    %% ================================================
+    %% CLIENTES EXTERNOS
+    %% ================================================
+    subgraph HOST["HOST · Puertos expuestos"]
+        direction LR
+        HttpN["HTTP :3000"]
+        HttpC["HTTP :3001"]
+        HttpS["HTTP :3002"]
+        IoTN["Camiones NORTE<br/>MQTT :1883"]
+        IoTC["Camiones CENTRO<br/>MQTT :1884"]
+        IoTS["Camiones SUR<br/>MQTT :1885"]
+        DbUI["DB UI :8080 / :8081 / :8082"]
+    end
+
+    HttpN --> ApiN
+    HttpC --> ApiC
+    HttpS --> ApiS
+    IoTN --> BrokN
+    IoTC --> BrokC
+    IoTS --> BrokS
+    DbUI --> R1
+    DbUI --> R2
+    DbUI --> R3
+
+    %% ================================================
+    %% ORDEN DE ARRANQUE
+    %% ================================================
+    CLUSTER -. "Debe levantarse PRIMERO" .-> NORTE
+    CLUSTER -. "Debe levantarse PRIMERO" .-> CENTRO
+    CLUSTER -. "Debe levantarse PRIMERO" .-> SUR
+
+    %% ================================================
+    %% ESTILOS
+    %% ================================================
+    classDef api fill:#c8e6c9,stroke:#2e7d32,color:#1b5e20
+    classDef mqtt fill:#ffe0b2,stroke:#ef6c00,color:#e65100
+    classDef lb fill:#f8bbd0,stroke:#c2185b,color:#880e4f
+    classDef job fill:#fff4e0,stroke:#e0a030,color:#704000
+    classDef vol fill:#e1bee7,stroke:#6a1b9a,color:#4a148c
+
+    style CLUSTER fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style NORTE fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style CENTRO fill:#fff8e1,stroke:#f57f17,stroke-width:2px
+    style SUR fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    style HOST fill:#fafafa,stroke:#666
+
+    style NETDB fill:#bbdefb,stroke:#1976d2
+    style NETN fill:#c8e6c9,stroke:#388e3c
+    style NETC fill:#fff59d,stroke:#fbc02d
+    style NETS fill:#f8bbd0,stroke:#c2185b

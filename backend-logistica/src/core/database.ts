@@ -19,7 +19,7 @@ export const AppDataSource = new DataSource({
     
     // Aquí le diremos a TypeORM dónde buscar los modelos de tablas de cada feature
     entities: [
-        path.join(__dirname, '/../features/**/infrastructure/**/*.entity{.ts,.js}')
+        path.join(__dirname, '/../features/**/models/*.entity{.ts,.js}')
     ],
     
     // Requerido por CockroachDB para consultas de viaje en el tiempo

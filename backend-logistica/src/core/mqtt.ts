@@ -13,19 +13,39 @@ const opcionesConexion: mqtt.IClientOptions = {
 
 export const mqttClient = mqtt.connect(MQTT_URL, opcionesConexion);
 
+// Listeners persistentes (fuera del Promise para que sobrevivan al arranque)
+mqttClient.on('error', (err) => {
+    console.error(`❌ Error MQTT en región ${REGION}:`, err);
+});
+
+mqttClient.on('offline', () => {
+    console.warn(`⚠️ Cliente MQTT (${REGION}) desconectado. Reconectando...`);
+});
+
 export const inicializarMQTT = (): Promise<void> => {
-    return new Promise((resolve) => {
-        mqttClient.on('connect', () => {
+    return new Promise((resolve, reject) => {
+        // FIX: Race condition — el cliente puede conectarse ANTES de que se llame
+        // esta función (mientras la BD inicializa). Si ya está conectado, resolvemos.
+        if (mqttClient.connected) {
+            console.log(`📡 Conexión MQTT ya establecida en la región ${REGION} -> ${MQTT_URL}`);
+            return resolve();
+        }
+
+        const onConnect = () => {
             console.log(`📡 Conexión MQTT establecida en la región ${REGION} -> ${MQTT_URL}`);
+            mqttClient.removeListener('connect', onConnect);
+            mqttClient.removeListener('error', onConnectError);
             resolve();
-        });
+        };
 
-        mqttClient.on('error', (err) => {
-            console.error(`❌ Error MQTT en región ${REGION}:`, err);
-        });
+        // Solo capturamos el error de conexión inicial, no los persistentes
+        const onConnectError = (err: Error) => {
+            mqttClient.removeListener('connect', onConnect);
+            mqttClient.removeListener('error', onConnectError);
+            reject(err);
+        };
 
-        mqttClient.on('offline', () => {
-            console.warn(`⚠️ Cliente MQTT (${REGION}) desconectado. Reconectando...`);
-        });
+        mqttClient.once('connect', onConnect);
+        mqttClient.once('error', onConnectError);
     });
 };

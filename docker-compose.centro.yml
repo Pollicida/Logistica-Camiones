@@ -1,0 +1,79 @@
+# ==========================================================
+# STACK REGIONAL: CENTRO
+# ----------------------------------------------------------
+# Requiere que el stack `logistica-cluster` esté levantado.
+#
+#   docker compose -f docker-compose.centro.yml -p logistica-centro up -d
+# ==========================================================
+services:
+  # ----------------------------------------------------------
+  # LOAD BALANCER (HAPROXY) - REGION CENTRO
+  # ----------------------------------------------------------
+  lb_centro:
+    image: haproxy:2.8-alpine
+    container_name: lb_centro
+    ports:
+      - "26002:26257"
+    volumes:
+      - ./haproxy-centro.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      - cluster_db       # Alcance a los nodos roach1/2/3
+      - regionCentral    # Puente hacia la API de la región
+    restart: unless-stopped
+
+  # ----------------------------------------------------------
+  # BROKER MQTT - REGION CENTRO
+  # ----------------------------------------------------------
+  brokercentro:
+    image: eclipse-mosquitto:2.0.18
+    container_name: broker-mosquitto-centro
+    ports:
+      - "1884:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+    networks:
+      - regionCentral
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "1883"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+  # ----------------------------------------------------------
+  # API NODE.JS - REGION CENTRO
+  # ----------------------------------------------------------
+  api_centro:
+    build:
+      context: ./backend-logistica
+    container_name: server_central
+    ports:
+      - "3001:3000"    # Expuesto en 3001 al host, 3000 dentro del contenedor
+    environment:
+      - PORT=3000
+      - DATABASE_URL=postgresql://root@lb_centro:26257/logistica_flotilla?sslmode=disable
+      - MQTT_BROKER_URL=mqtt://brokercentro:1883
+      - REGION_ID=CENTRO
+      - JWT_SECRET=complex_secret_key_for_jwt_logistic_system
+    volumes:
+      - ./backend-logistica/src:/usr/src/app/src
+    depends_on:
+      lb_centro:
+        condition: service_started
+      brokercentro:
+        condition: service_healthy
+    networks:
+      - regionCentral
+    restart: unless-stopped
+
+# ==========================================================
+# REDES
+# ==========================================================
+networks:
+  regionCentral:
+    name: regionCentral
+    driver: bridge
+
+  cluster_db:
+    name: cluster_db
+    external: true

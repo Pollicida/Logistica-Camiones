@@ -1,7 +1,8 @@
-import 'reflect-metadata'; 
+import 'reflect-metadata';
 import { inicializarBaseDeDatos } from './core/database';
 import { inicializarMQTT } from './core/mqtt';
 import { inicializarServidor } from './core/server';
+import { inicializarTelemetria } from './features/telemetria';
 
 async function bootstrap() {
     const region = process.env.REGION_ID || 'LOCAL';
@@ -11,13 +12,14 @@ async function bootstrap() {
         // 1. Conexión a CockroachDB
         await inicializarBaseDeDatos();
 
-        console.log(`🏁 [${region}] Toda la infraestructura core está en línea y operando.`);
         // 2. Conexión a Mosquitto (MQTT)
         await inicializarMQTT();
 
-        console.log(`🏁 [${region}] Toda la infraestructura core está en línea y operando.`);
         // 3. Levantamos Express y Socket.io
         await inicializarServidor();
+
+        // 4. Activar módulos de negocio que dependen de MQTT y WS
+        inicializarTelemetria();
 
         console.log(`🏁 [${region}] Toda la infraestructura core está en línea y operando.`);
 

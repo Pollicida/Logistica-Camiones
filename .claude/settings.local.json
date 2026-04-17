@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(docker compose *)",
+      "Bash(curl -s http://localhost:3000/api/health)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl *)",
+      "Bash(docker exec logistica-roach1-1 *)",
+      "Bash(docker run *)",
+      "Bash(docker exec *)"
+    ]
+  }
+}
