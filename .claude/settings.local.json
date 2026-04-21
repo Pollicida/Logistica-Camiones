@@ -8,7 +8,13 @@
       "Bash(curl *)",
       "Bash(docker exec logistica-roach1-1 *)",
       "Bash(docker run *)",
-      "Bash(docker exec *)"
+      "Bash(docker exec *)",
+      "Bash(npx --yes -p typescript@6.0.2 tsc --noEmit)",
+      "Bash(npx jest *)",
+      "Bash(docker port server_norte *)",
+      "Bash(docker stop *)",
+      "Bash(docker rm *)",
+      "Bash(docker build *)"
     ]
   }
 }

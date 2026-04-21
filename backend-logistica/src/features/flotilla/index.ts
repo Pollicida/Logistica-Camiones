@@ -8,8 +8,17 @@ import { ProveedorEntity } from './models/proveedor.entity';
 export { flotillaRouter } from './flotilla.routeS';
 
 /**
+ * Tipo expuesto por la fachada para describir el techo físico de la flota regional.
+ * carga en kg; volumen en m³ (puede ser null si no se captura).
+ */
+export interface CapacidadCamionResumen {
+    capacidad_carga: number;
+    capacidad_volumen: number | null;
+}
+
+/**
  * 2. API INTERNA (Fachada)
- * Proporciona métodos de solo lectura para que otros módulos (como Operaciones o Ruteo) 
+ * Proporciona métodos de solo lectura para que otros módulos (como Operaciones o Ruteo)
  * puedan validar datos sin romper la encapsulación.
  */
 export const FlotillaFacade = {
@@ -19,6 +28,28 @@ export const FlotillaFacade = {
         const repo = AppDataSource.getRepository(CamionEntity);
         const camion = await repo.findOne({ where: { id_camion, activo: true } });
         return camion ? Number(camion.capacidad_carga) : null;
+    },
+
+    /**
+     * Devuelve el techo físico de la flota regional (consumido por Operaciones -> Regla 2).
+     * Estrategia: el camión con mayor capacidad_carga entre los activos de la región representa
+     * el máximo que la región puede mover en un solo viaje. El volumen asociado acompaña al mismo
+     * registro para mantener consistencia (no se mezclan capacidades de camiones distintos).
+     */
+    obtenerCapacidadMaximaCamion: async (id_region: string): Promise<CapacidadCamionResumen | null> => {
+        const repo = AppDataSource.getRepository(CamionEntity);
+        const camion = await repo
+            .createQueryBuilder('c')
+            .where('c.activo = :activo', { activo: true })
+            .andWhere('c.id_region = :id_region', { id_region })
+            .orderBy('c.capacidad_carga', 'DESC')
+            .limit(1)
+            .getOne();
+        if (!camion) return null;
+        return {
+            capacidad_carga: Number(camion.capacidad_carga),
+            capacidad_volumen: camion.capacidad_volumen === null ? null : Number(camion.capacidad_volumen)
+        };
     },
 
     // --- Lógica para Conductores ---

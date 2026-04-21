@@ -9,6 +9,12 @@ import { flotillaRouter } from '../features/flotilla';
 //Feature Auth
 import { authRouter } from '../features/auth';
 
+// Versionado + Swagger
+import { registerApiVersions, bootstrapSwaggerUI } from './swagger';
+
+// Manejador global de errores
+import { errorHandler, notFoundHandler } from './errors/errorHandler';
+
 // 1. Inicializamos la aplicación de Express
 const app = express();
 
@@ -39,14 +45,31 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// 6. Función para arrancar el servidor
-export const inicializarServidor = (): Promise<void> => {
-    return new Promise((resolve) => {
-        const puerto = process.env.PORT || 3000;
+// 6. Registro de versiones de la API (monta /api/v1/... + /api/v1/docs.json + /api/versions)
+registerApiVersions(app);
 
+// 8. Función para arrancar el servidor
+export const inicializarServidor = async (): Promise<void> => {
+    const puerto = process.env.PORT || 3000;
+
+    // Swagger UI ANTES del notFoundHandler para que la ruta /docs sea alcanzable
+    const swaggerMontado = await bootstrapSwaggerUI(app);
+
+    // 7. 404 + error handler al final de la cadena de middlewares (deben ir aquí, al último)
+    app.use(notFoundHandler);
+    app.use(errorHandler);
+
+    return new Promise((resolve) => {
         server.listen(puerto, () => {
             console.log(`🌐 Servidor HTTP y WebSockets escuchando en el puerto ${puerto}`);
+            if (swaggerMontado) {
+                console.log('📚 Swagger UI disponible en /api/v1/docs (spec JSON en /api/v1/docs.json)');
+            } else {
+                console.log('📘 Spec OpenAPI disponible en /api/v1/docs.json (instala swagger-ui-express para UI)');
+            }
             resolve();
         });
     });
 };
+
+export { app };

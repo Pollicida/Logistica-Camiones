@@ -2,6 +2,59 @@
 -- 0. Activar la extensión espacial
 CREATE EXTENSION IF NOT EXISTS postgis;
 
+-- 4. Inventario (Modificados a UUID)
+CREATE TABLE Productos (
+    id_producto UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nombre_producto VARCHAR NOT NULL,
+    stock INTEGER DEFAULT 0,
+    precio_unitario DECIMAL(10,2) NOT NULL,
+    peso_kg DECIMAL(8,3) NOT NULL DEFAULT 0,
+    volumen_m3 DECIMAL(8,4) NOT NULL DEFAULT 0,
+    temperatura_minima DECIMAL(5,2) NOT NULL,
+    temperatura_maxima DECIMAL(5,2) NOT NULL,
+    id_proveedor UUID REFERENCES Proveedores(id_proveedor),
+    activo BOOLEAN DEFAULT TRUE,
+    id_region VARCHAR REFERENCES Regiones(id_region),
+    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE Pedidos (
+    id_pedido UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_cliente UUID REFERENCES Clientes(id_cliente),
+    total DECIMAL(12,2) NOT NULL,
+    hora_pedido TIMESTAMP NOT NULL,
+    descripcion_status VARCHAR NOT NULL,
+    hora_entrega TIMESTAMP,
+    descripcion TEXT,
+    id_viaje UUID REFERENCES Viajes(id_viaje),
+    id_region VARCHAR REFERENCES Regiones(id_region),
+    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE Detalle_Pedidos (
+    id_detalle UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_pedido UUID REFERENCES Pedidos(id_pedido),
+    id_producto UUID REFERENCES Productos(id_producto),
+    cantidad INTEGER NOT NULL,
+    precio_unitario DECIMAL(10,2) NOT NULL
+);
+
+CREATE TABLE Camiones (
+    id_camion UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    marca VARCHAR NOT NULL,
+    modelo VARCHAR NOT NULL,
+    numero_de_serie VARCHAR UNIQUE NOT NULL,
+    placas VARCHAR UNIQUE NOT NULL,
+    capacidad_carga DECIMAL(10,2) NOT NULL,
+    capacidad_volumen DECIMAL(10,2),
+    temperatura_minima_soportada DECIMAL(5,2) NOT NULL,
+    temperatura_maxima_soportada DECIMAL(5,2) NOT NULL,
+    fecha_ingreso DATE NOT NULL,
+    activo BOOLEAN DEFAULT TRUE,
+    id_region VARCHAR REFERENCES Regiones(id_region),
+    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 1. Catálogos Independientes (Mantenemos VARCHAR para llaves naturales)
 CREATE TABLE Regiones (
     id_region VARCHAR PRIMARY KEY,
@@ -48,21 +101,6 @@ CREATE TABLE Conductores (
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE Camiones (
-    id_camion UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    marca VARCHAR NOT NULL,
-    modelo VARCHAR NOT NULL,
-    numero_de_serie VARCHAR UNIQUE NOT NULL,
-    placas VARCHAR UNIQUE NOT NULL,
-    capacidad_carga DECIMAL(10,2) NOT NULL,
-    capacidad_volumen DECIMAL(10,2),
-    temperatura_minima_soportada DECIMAL(5,2) NOT NULL,
-    temperatura_maxima_soportada DECIMAL(5,2) NOT NULL,
-    fecha_ingreso DATE NOT NULL,
-    activo BOOLEAN DEFAULT TRUE,
-    id_region VARCHAR REFERENCES Regiones(id_region),
-    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
 
 CREATE TABLE Clientes (
     id_cliente UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -89,18 +127,6 @@ CREATE TABLE Proveedores (
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. Inventario (Modificados a UUID)
-CREATE TABLE Productos (
-    id_producto UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    nombre_producto VARCHAR NOT NULL,
-    stock INTEGER DEFAULT 0,
-    temperatura_minima DECIMAL(5,2) NOT NULL,
-    temperatura_maxima DECIMAL(5,2) NOT NULL,
-    id_proveedor UUID REFERENCES Proveedores(id_proveedor),
-    activo BOOLEAN DEFAULT TRUE,
-    id_region VARCHAR REFERENCES Regiones(id_region),
-    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
 
 -- 5. Operaciones Logísticas (Modificados a UUID)
 CREATE TABLE Viajes (
@@ -127,26 +153,6 @@ CREATE TABLE Telemetria_Camiones (
 );
 CREATE INDEX idx_telemetria_ubicacion ON Telemetria_Camiones USING GIST (ubicacion_actual);
 
-CREATE TABLE Pedidos (
-    id_pedido UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    id_cliente UUID REFERENCES Clientes(id_cliente),
-    total DECIMAL(12,2) NOT NULL,
-    hora_pedido TIMESTAMP NOT NULL,
-    descripcion_status VARCHAR NOT NULL,
-    hora_entrega TIMESTAMP,
-    descripcion TEXT,
-    id_viaje UUID REFERENCES Viajes(id_viaje),
-    id_region VARCHAR REFERENCES Regiones(id_region),
-    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE Detalle_Pedidos (
-    id_detalle UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    id_pedido UUID REFERENCES Pedidos(id_pedido),
-    id_producto UUID REFERENCES Productos(id_producto),
-    cantidad INTEGER NOT NULL,
-    precio_unitario DECIMAL(10,2) NOT NULL
-);
 
 CREATE TABLE Anomalias (
     id_anomalia UUID PRIMARY KEY DEFAULT gen_random_uuid(),
