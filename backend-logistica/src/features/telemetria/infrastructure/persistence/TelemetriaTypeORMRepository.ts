@@ -21,19 +21,17 @@ export class TelemetriaTypeORMRepository implements ITelemetriaRepository {
              VALUES
                 ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), $5, NULL, $6)`,
             [
-                lectura.id_camion,
+                lectura.id_camion!,
                 id_viaje,         // null si no hay viaje activo, la BD acepta NULL aquí
-                lectura.longitud,
-                lectura.latitud,
-                lectura.temperatura,
-                lectura.fecha,
+                lectura.longitud!,
+                lectura.latitud!,
+                lectura.temperatura!,
+                lectura.fecha!,
             ]
         );
     }
 
     async buscarViajeActivoPorCamion(id_camion: string): Promise<string | null> {
-        // Comunicación intra-BD: consulta la tabla Viajes directamente.
-        // Para comunicación entre módulos en memoria, ver FlotillaFacade en index.ts.
         const rows: Array<{ id_viaje: string }> = await AppDataSource.query(
             `SELECT id_viaje FROM viajes
              WHERE id_camion = $1
@@ -42,5 +40,18 @@ export class TelemetriaTypeORMRepository implements ITelemetriaRepository {
             [id_camion]
         );
         return rows[0]?.id_viaje ?? null;
+    }
+
+    async registrarAnomalia(lectura: LecturaTelemetria, id_viaje: string | null): Promise<string> {
+        const rows: Array<{ id_anomalia: string }> = await AppDataSource.query(
+            `INSERT INTO anomalias
+                (id_viaje, ubicacion_anomalia, descripcion, fecha_inicio, status, id_region)
+             VALUES
+                ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326), $4, $5, 'ACTIVA', $6)
+             RETURNING id_anomalia`,
+            [id_viaje, lectura.longitud, lectura.latitud,
+                'Anomalía detectada vía telemetría', lectura.fecha, lectura.region]
+        );
+        return rows[0]!.id_anomalia;
     }
 }

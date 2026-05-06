@@ -14,7 +14,11 @@
       "Bash(docker port server_norte *)",
       "Bash(docker stop *)",
       "Bash(docker rm *)",
-      "Bash(docker build *)"
+      "Bash(docker build *)",
+      "Bash(npx tsc *)",
+      "Bash(xargs ls *)",
+      "Bash(grep -E \"^C:/Repos/logistica/backend-logistica/src/index.ts$\")",
+      "Bash(grep -E \"\\\\.ts$\")"
     ]
   }
 }

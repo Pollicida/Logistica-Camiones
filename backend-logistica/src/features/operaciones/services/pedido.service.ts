@@ -5,16 +5,33 @@ import {
     CapacidadExcedidaError,
     NotFoundError,
     StockInsuficienteError,
+    ForbiddenError,
+    ConflictError,
     InternalError
 } from '../../../core/errors/AppError';
 import { CrearPedidoDTO } from '../dto/crear-pedido.dto';
 import { PedidoEntity } from '../models/pedido.entity';
 import { DetallePedidoEntity } from '../models/detalle-pedido.entity';
 import { ProductoEntity } from '../models/producto.entity';
-import { PedidoMapper, PedidoView } from '../mappers/pedido.mapper';
+import { ViajeEntity } from '../models/viaje.entity';
+import { PedidoMapper, PedidoView, PedidoResumen } from '../mappers/pedido.mapper';
+
+export interface EntregaView {
+    id_pedido: string;
+    descripcion_status: 'ENTREGADO';
+    hora_entrega: string;
+    id_viaje: string;
+    viaje_completado: boolean;
+}
+
+export type ValidacionClienteRegion =
+    | { estado: 'OK' }
+    | { estado: 'NO_ENCONTRADO' }
+    | { estado: 'REGION_INCORRECTA'; id_region_cliente: string | null };
 
 export interface FlotillaFacadeLike {
     obtenerCapacidadMaximaCamion(id_region: string): Promise<CapacidadCamionResumen | null>;
+    validarClienteParaRegion(id_cliente: string, id_region: string): Promise<ValidacionClienteRegion>;
 }
 
 export interface PedidoServiceDeps {
@@ -46,7 +63,37 @@ export class PedidoService {
         this.now = deps.now ?? (() => new Date());
     }
 
+    async listarPedidos(filtros: { status?: string } = {}): Promise<PedidoResumen[]> {
+        const repo = this.dataSource.getRepository(PedidoEntity);
+        const where: Record<string, unknown> = { id_region: this.regionId };
+        if (filtros.status) where['descripcion_status'] = filtros.status;
+        const pedidos = await repo.find({ where, order: { hora_pedido: 'DESC' } });
+        return pedidos.map(p => PedidoMapper.toResumen(p));
+    }
+
+    async obtenerPedido(id_pedido: string): Promise<PedidoView> {
+        const pedido = await this.dataSource.getRepository(PedidoEntity).findOne({ where: { id_pedido } });
+        if (!pedido) throw new NotFoundError(`Pedido ${id_pedido} no existe`);
+        const detalles = await this.dataSource.getRepository(DetallePedidoEntity).find({ where: { id_pedido } });
+        return PedidoMapper.toView(pedido, detalles, {
+            peso_total_kg: Number(pedido.peso_total),
+            volumen_total_m3: Number(pedido.volumen_total)
+        });
+    }
+
     async crearPedido(dto: CrearPedidoDTO): Promise<PedidoView> {
+        // Regla 0: validar cliente (existe, activo y en la región del servidor)
+        // Se hace ANTES de abrir transacción para fallar rápido sin bloquear filas.
+        const clienteCheck = await this.flotilla.validarClienteParaRegion(dto.id_cliente, this.regionId);
+        if (clienteCheck.estado === 'NO_ENCONTRADO') {
+            throw new NotFoundError(`Cliente ${dto.id_cliente} no existe o está inactivo`);
+        }
+        if (clienteCheck.estado === 'REGION_INCORRECTA') {
+            throw new ForbiddenError(
+                `El cliente no pertenece a la región ${this.regionId} atendida por este servidor`
+            );
+        }
+
         const queryRunner = this.dataSource.createQueryRunner();
         await queryRunner.connect();
         await queryRunner.startTransaction();
@@ -120,16 +167,20 @@ export class PedidoService {
                 await queryRunner.manager.save(ProductoEntity, p);
             }
 
+            // Transición automática CREADO → EN_COLA al persistir (RF-01, RF-02).
             const pedidoRepo = queryRunner.manager.getRepository(PedidoEntity);
             const pedido = pedidoRepo.create({
                 id_cliente: dto.id_cliente,
                 total: total_pedido,
                 hora_pedido: this.now(),
-                descripcion_status: 'CREADO',
+                descripcion_status: 'EN_COLA',
                 hora_entrega: null,
                 descripcion: dto.descripcion ?? null,
                 id_viaje: null,
-                id_region: this.regionId
+                id_region: this.regionId,
+                prioridad: dto.prioridad ?? 'NORMAL',
+                peso_total,
+                volumen_total
             });
             const pedidoGuardado = await pedidoRepo.save(pedido);
 
@@ -159,6 +210,67 @@ export class PedidoService {
             );
         } finally {
             await queryRunner.release();
+        }
+    }
+
+    /**
+     * RF-06: el administrador confirma manualmente que un pedido EN_RUTA fue entregado.
+     * Si era el último pedido pendiente del viaje, cierra el viaje como COMPLETADO.
+     */
+    async confirmarEntrega(id_pedido: string): Promise<EntregaView> {
+        const qr = this.dataSource.createQueryRunner();
+        await qr.connect();
+        await qr.startTransaction();
+        try {
+            const pedidoRows: Array<{ id_pedido: string; descripcion_status: string; id_viaje: string | null }> =
+                await qr.query(
+                    `SELECT id_pedido, descripcion_status, id_viaje FROM pedidos WHERE id_pedido = $1 FOR UPDATE`,
+                    [id_pedido]
+                );
+            const pedido = pedidoRows[0];
+            if (!pedido) throw new NotFoundError(`Pedido ${id_pedido} no existe`);
+            if (pedido.descripcion_status !== 'EN_RUTA') {
+                throw new ConflictError(
+                    `El pedido solo puede confirmarse en estado EN_RUTA (actual: ${pedido.descripcion_status})`,
+                    { id_pedido, estado_actual: pedido.descripcion_status }
+                );
+            }
+            if (!pedido.id_viaje) throw new ConflictError('El pedido no tiene viaje asignado', { id_pedido });
+
+            const viajeRows: Array<{ status: string }> = await qr.query(
+                `SELECT status FROM viajes WHERE id_viaje = $1 FOR UPDATE`,
+                [pedido.id_viaje]
+            );
+            const viaje = viajeRows[0];
+            if (!viaje || !['EN_CAMINO', 'EN_ENTREGA'].includes(viaje.status)) {
+                throw new ConflictError(
+                    `El viaje no está en estado válido para confirmar entrega (actual: ${viaje?.status ?? 'no encontrado'})`,
+                    { id_viaje: pedido.id_viaje, estado_viaje: viaje?.status ?? null }
+                );
+            }
+
+            const ahora = this.now();
+            await qr.manager.update(PedidoEntity, { id_pedido }, { descripcion_status: 'ENTREGADO', hora_entrega: ahora });
+
+            const countRows: Array<{ c: string | number }> = await qr.query(
+                `SELECT COUNT(*)::int AS c FROM pedidos WHERE id_viaje = $1 AND descripcion_status != 'ENTREGADO'`,
+                [pedido.id_viaje]
+            );
+            const pendientes = Number(countRows[0]?.c ?? 1);
+            let viaje_completado = false;
+            if (pendientes === 0) {
+                await qr.manager.update(ViajeEntity, { id_viaje: pedido.id_viaje }, { status: 'COMPLETADO', hora_llegada: ahora });
+                viaje_completado = true;
+            }
+
+            await qr.commitTransaction();
+            return { id_pedido, descripcion_status: 'ENTREGADO', hora_entrega: ahora.toISOString(), id_viaje: pedido.id_viaje, viaje_completado };
+        } catch (error) {
+            await qr.rollbackTransaction();
+            if (error instanceof Error && (error as { isOperational?: boolean }).isOperational) throw error;
+            throw new InternalError('Error confirmando entrega', error instanceof Error ? { cause: error.message } : undefined);
+        } finally {
+            await qr.release();
         }
     }
 }

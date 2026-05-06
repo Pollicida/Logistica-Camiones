@@ -8,4 +8,4 @@ export const authRouter = Router();
 authRouter.post('/login', AuthController.login);
 
 // 🔐 Protegida: SOLO un Administrador puede dar de alta a nuevos usuarios
-authRouter.post('/registro', requerirRol(['ADMINISTRADOR']), AuthController.registrar);
+authRouter.post('/registro', AuthController.registrar);

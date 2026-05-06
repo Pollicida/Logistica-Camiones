@@ -14,6 +14,7 @@ import { registerApiVersions, bootstrapSwaggerUI } from './swagger';
 
 // Manejador global de errores
 import { errorHandler, notFoundHandler } from './errors/errorHandler';
+import { operacionesRouter } from '../features/operaciones';
 
 // 1. Inicializamos la aplicación de Express
 const app = express();
@@ -26,6 +27,7 @@ app.use(cors()); // Permite peticiones desde tu frontend (Angular/React/Vue/Flut
 app.use(express.json()); // Permite recibir JSON en los POST requests
 app.use('/api/auth', authRouter); //Conexión al módulo de autenticación
 app.use('/api/flotilla', flotillaRouter);
+app.use('/api/operaciones', operacionesRouter);
 
 // 4. Inicializamos el servidor de WebSockets
 export const wsServer = new Server(server, {

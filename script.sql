@@ -106,7 +106,7 @@ CREATE TABLE Clientes (
     id_cliente UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nombre_cliente VARCHAR NOT NULL,
     direccion VARCHAR NOT NULL,
-    ubicacion GEOMETRY(Point, 4326), 
+    ubicacion GEOMETRY(Point, 4326),
     telefono VARCHAR,
     correo VARCHAR,
     encargado VARCHAR,

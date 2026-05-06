@@ -15,7 +15,7 @@
  *  - 'desuscribir:camion', id_camion  → sale del canal de un camión
  */
 import { Server } from 'socket.io';
-import { ITelemetriaPublisher } from '../../domain/ports/ITelemetriaPublisher';
+import { ITelemetriaPublisher, AnomaliaPayload } from '../../domain/ports/ITelemetriaPublisher';
 import { LecturaTelemetria } from '../../domain/models/LecturaTelemetria';
 
 export interface TelemetriaPayload {
@@ -49,5 +49,9 @@ export class TelemetriaWSAdapter implements ITelemetriaPublisher {
 
         // Canal específico: clientes que siguen un camión puntual
         this.io.to(`camion:${lectura.id_camion}`).emit('telemetria:update', payload);
+    }
+
+    publicarAnomalia(payload: AnomaliaPayload): void {
+        this.io.to('telemetria').emit('anomalia:detectada', payload);
     }
 }

@@ -1,13 +1,16 @@
 import { ValidationError } from '../../../core/errors/AppError';
 import { ItemPedidoDTO, validarItemPedidoDTO } from './item-pedido.dto';
+import { PedidoPrioridad } from '../models/pedido.entity';
 
 export interface CrearPedidoDTO {
     id_cliente: string;
     items: ItemPedidoDTO[];
     descripcion?: string;
+    prioridad?: PedidoPrioridad;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PRIORIDADES_VALIDAS: readonly PedidoPrioridad[] = ['NORMAL', 'ALTA'];
 
 export const validarCrearPedidoDTO = (raw: unknown): CrearPedidoDTO => {
     if (typeof raw !== 'object' || raw === null) {
@@ -31,9 +34,17 @@ export const validarCrearPedidoDTO = (raw: unknown): CrearPedidoDTO => {
         throw new ValidationError('descripcion debe ser string');
     }
 
+    const prioridadRaw = obj['prioridad'];
+    if (prioridadRaw !== undefined && !PRIORIDADES_VALIDAS.includes(prioridadRaw as PedidoPrioridad)) {
+        throw new ValidationError(`prioridad debe ser uno de: ${PRIORIDADES_VALIDAS.join(', ')}`);
+    }
+
     const dto: CrearPedidoDTO = { id_cliente, items: parsedItems };
     if (typeof descripcionRaw === 'string') {
         dto.descripcion = descripcionRaw;
+    }
+    if (prioridadRaw !== undefined) {
+        dto.prioridad = prioridadRaw as PedidoPrioridad;
     }
     return dto;
 };

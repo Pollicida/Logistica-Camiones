@@ -4,9 +4,18 @@
  */
 import { LecturaTelemetria } from '../models/LecturaTelemetria';
 
+export interface AnomaliaPayload {
+    id_anomalia: string;
+    id_viaje: string | null;
+    id_camion: string;
+    latitud: number;
+    longitud: number;
+    temperatura: number;
+    fecha: string;
+    region: string;
+}
+
 export interface ITelemetriaPublisher {
-    /**
-     * Publica una lectura de telemetría hacia los clientes conectados en tiempo real.
-     */
     publicar(lectura: LecturaTelemetria): void;
+    publicarAnomalia(payload: AnomaliaPayload): void;
 }

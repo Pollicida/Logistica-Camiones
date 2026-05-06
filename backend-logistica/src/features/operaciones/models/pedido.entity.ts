@@ -5,7 +5,8 @@ const decimalTransformer = {
     from: (value: string | null): number | null => (value === null ? null : Number(value))
 };
 
-export type PedidoStatus = 'CREADO' | 'EN_RUTA' | 'ENTREGADO' | 'CANCELADO';
+export type PedidoStatus = 'CREADO' | 'EN_COLA' | 'ASIGNADO' | 'EN_RUTA' | 'ENTREGADO';
+export type PedidoPrioridad = 'NORMAL' | 'ALTA';
 
 @Entity('pedidos')
 export class PedidoEntity {
@@ -35,6 +36,15 @@ export class PedidoEntity {
 
     @Column({ type: 'varchar', nullable: true })
     id_region!: string | null;
+
+    @Column({ type: 'varchar', default: 'NORMAL' })
+    prioridad!: PedidoPrioridad;
+
+    @Column({ type: 'decimal', precision: 10, scale: 3, default: 0, transformer: decimalTransformer })
+    peso_total!: number;
+
+    @Column({ type: 'decimal', precision: 10, scale: 4, default: 0, transformer: decimalTransformer })
+    volumen_total!: number;
 
     @UpdateDateColumn({ type: 'timestamp' })
     fecha_actualizacion!: Date;

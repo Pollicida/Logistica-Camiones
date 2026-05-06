@@ -1,4 +1,4 @@
-import { PedidoEntity } from '../models/pedido.entity';
+import { PedidoEntity, PedidoPrioridad } from '../models/pedido.entity';
 import { DetallePedidoEntity } from '../models/detalle-pedido.entity';
 
 export interface DetallePedidoView {
@@ -17,6 +17,7 @@ export interface PedidoView {
     descripcion_status: string;
     descripcion: string | null;
     id_region: string | null;
+    prioridad: PedidoPrioridad;
     detalles: DetallePedidoView[];
     metricas: {
         peso_total_kg: number;
@@ -24,7 +25,33 @@ export interface PedidoView {
     };
 }
 
+export interface PedidoResumen {
+    id_pedido: string;
+    id_cliente: string | null;
+    total: number;
+    hora_pedido: string;
+    descripcion_status: string;
+    id_region: string | null;
+    prioridad: PedidoPrioridad;
+    peso_total_kg: number;
+    volumen_total_m3: number;
+}
+
 export const PedidoMapper = {
+    toResumen(pedido: PedidoEntity): PedidoResumen {
+        return {
+            id_pedido: pedido.id_pedido,
+            id_cliente: pedido.id_cliente,
+            total: Number(pedido.total),
+            hora_pedido: pedido.hora_pedido.toISOString(),
+            descripcion_status: pedido.descripcion_status,
+            id_region: pedido.id_region,
+            prioridad: pedido.prioridad,
+            peso_total_kg: Number(pedido.peso_total),
+            volumen_total_m3: Number(pedido.volumen_total)
+        };
+    },
+
     toView(
         pedido: PedidoEntity,
         detalles: DetallePedidoEntity[],
@@ -38,6 +65,7 @@ export const PedidoMapper = {
             descripcion_status: pedido.descripcion_status,
             descripcion: pedido.descripcion,
             id_region: pedido.id_region,
+            prioridad: pedido.prioridad,
             detalles: detalles.map(d => ({
                 id_detalle: d.id_detalle,
                 id_producto: d.id_producto,
