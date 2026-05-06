@@ -153,6 +153,7 @@ services:
       - MQTT_BROKER_URL=mqtt://brokernorte:1883
       - REGION_ID=NORTE
       - JWT_SECRET=complex_secret_key_for_jwt_logistic_system
+      - GOOGLE_MAPS_API_KEY=AIzaSyC0y8HD05_K9MCt2IM6srTbpkVL3xcBLS8
     volumes:
       - ./backend-logistica/src:/usr/src/app/src
     depends_on:

@@ -324,12 +324,20 @@ export class ViajeService {
         ));
     }
 
-    async listar(filtros: { status?: ViajeStatus } = {}): Promise<ViajeView[]> {
+    // En tu ViajeService.ts (método listar)
+    async listar(filtros: { status?: string; id_camion?: string; id_conductor?: string }) {
         const repo = this.dataSource.getRepository(ViajeEntity);
-        const where = filtros.status ? { status: filtros.status, id_region: this.regionId } : { id_region: this.regionId };
-        const viajes = await repo.find({ where, order: { fecha_actualizacion: 'DESC' } });
-        // Evitamos N+1 y no enriquecemos con camión/conductor en listado (endpoint de detalle lo hace).
-        return viajes.map(v => ViajeMapper.toView(v));
+
+        const whereClause: any = {};
+
+        if (filtros.status) whereClause.status = filtros.status;
+        if (filtros.id_camion) whereClause.id_camion = filtros.id_camion;
+        if (filtros.id_conductor) whereClause.id_conductor = filtros.id_conductor;
+
+        return await repo.find({
+            where: whereClause,
+            order: { fecha_actualizacion: 'DESC' }
+        });
     }
 
     // ---------- Helpers privados ----------
@@ -471,7 +479,7 @@ export class ViajeService {
     }
 
     private async cargarExtras(viaje: ViajeEntity) {
-        const [pedidos, camionRows, conductorRows, detallesRows] = await Promise.all([
+        const [pedidos, camionRows, conductorRows, detallesRows, rutasRows, puntosRows] = await Promise.all([
             this.dataSource.query(
                 `SELECT id_pedido, id_cliente, descripcion_status, prioridad, peso_total, volumen_total, id_region, id_viaje
                  FROM pedidos WHERE id_viaje = $1`,
@@ -495,11 +503,32 @@ export class ViajeService {
                  JOIN productos p ON dp.id_producto = p.id_producto
                  WHERE dp.id_pedido IN (SELECT id_pedido FROM pedidos WHERE id_viaje = $1)`,
                 [viaje.id_viaje]
-            ) as Promise<DetallePedidoRow[]>
+            ) as Promise<DetallePedidoRow[]>,
+            // --- AQUÍ EXTRAEMOS LA RUTA Y SUS PUNTOS ---
+            viaje.id_ruta
+                ? this.dataSource.query(
+                    `SELECT id_ruta, distancia_km, tiempo_estimado_minutos FROM rutas WHERE id_ruta = $1`,
+                    [viaje.id_ruta]
+                ) as Promise<any[]>
+                : Promise.resolve([]),
+            viaje.id_ruta
+                ? this.dataSource.query(
+                    `SELECT latitud, longitud, orden_parada FROM puntos_ruta WHERE id_ruta = $1 ORDER BY orden_parada ASC`,
+                    [viaje.id_ruta]
+                ) as Promise<any[]>
+                : Promise.resolve([])
         ]);
 
         const camion = camionRows[0];
         const conductor = conductorRows[0];
+        const rutaData = rutasRows[0];
+
+        // Armamos el objeto de la ruta con su arreglo de puntos para el frontend
+        const rutaCompleta = rutaData ? {
+            ...rutaData,
+            puntos: puntosRows
+        } : null;
+
         return {
             pedidos: pedidos.map(p => toPedidoEnViaje(
                 p,
@@ -507,7 +536,8 @@ export class ViajeService {
                 detallesRows.filter(d => d.id_pedido === p.id_pedido)
             )),
             ...(camion ? { camion: toCamionView(camion) } : {}),
-            ...(conductor ? { conductor: toConductorView(conductor) } : {})
+            ...(conductor ? { conductor: toConductorView(conductor) } : {}),
+            ...(rutaCompleta ? { ruta: rutaCompleta } : {}) // Inyectamos la ruta en los extras
         };
     }
 

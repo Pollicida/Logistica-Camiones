@@ -35,7 +35,8 @@ export class ClientesController {
     static async listarClientes(req: Request, res: Response): Promise<void> {
         try {
             const repo = AppDataSource.getRepository(ClienteEntity);
-            const clientes = await repo.find({ where: { activo: true } });
+            const regionDelServidor = process.env.REGION_ID || 'NORTE';
+            const clientes = await repo.find({ where: { activo: true, id_region: regionDelServidor } });
 
             res.json(clientes);
         } catch (error) {

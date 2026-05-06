@@ -48,8 +48,11 @@ export class RuteoService {
      * Devuelve el id_ruta generado, o null si no hay API key o Google Maps falla.
      */
     async calcularYAsignarRuta(params: RuteoParams): Promise<string | null> {
+        console.log('\n--- 🗺️ INICIANDO CÁLCULO DE RUTA ---');
+        console.log(`[Ruteo] Viaje: ${params.id_viaje} | Pedidos a procesar: ${params.id_pedidos.length}`);
+
         if (!this.apiKey) {
-            console.warn('[Ruteo] GOOGLE_MAPS_API_KEY no configurada — viaje se crea sin ruta');
+            console.error('❌ ERROR: GOOGLE_MAPS_API_KEY no está configurada en tu archivo .env');
             return null;
         }
 
@@ -57,35 +60,54 @@ export class RuteoService {
         const entregasConCoords = puntosEntrega.filter(p => p.latitud !== null && p.longitud !== null) as
             Array<{ id_pedido: string; latitud: number; longitud: number }>;
 
+        console.log(`[Ruteo] Coordenadas encontradas en BD: ${entregasConCoords.length} de ${params.id_pedidos.length} pedidos.`);
+
         const primerPunto = entregasConCoords[0];
         if (entregasConCoords.length === 0 || !primerPunto) {
-            console.warn('[Ruteo] Ningún pedido tiene coordenadas de cliente — viaje sin ruta');
+            console.error('❌ ERROR: Ningún cliente tiene coordenadas válidas (lat/lng) en la base de datos.');
             return null;
         }
-
+        // 1. Separar el origen por defecto para que Google calcule una ruta real
+        // Si no hay telemetría, fingimos que sale de un almacén central un poco más lejos
         const origen = await this.consultarOrigenCamion(params.id_camion) ?? {
-            latitud: primerPunto.latitud,
-            longitud: primerPunto.longitud
+            latitud: 25.6682,  // Coordenada distinta para forzar una ruta
+            longitud: -100.3126
         };
 
+        console.log(`[Ruteo] Origen definido: [${origen.latitud}, ${origen.longitud}]`);
+        console.log(`[Ruteo] Llamando a Google Maps API...`);
+
         const mapsResp = await this.llamarGoogleMaps(origen, entregasConCoords);
-        const ruta = mapsResp?.routes[0];
-        if (!mapsResp || mapsResp.status !== 'OK' || !ruta) {
-            console.warn('[Ruteo] Google Maps devolvió status:', mapsResp?.status);
+        if (!mapsResp || mapsResp.status !== 'OK' || !mapsResp.routes[0]) {
+            console.warn('[Ruteo] Falla en Google Maps. Status:', mapsResp?.status);
             return null;
         }
 
+        const ruta = mapsResp.routes[0];
+        console.log('✅ Ruta calculada con éxito por Google Maps. Procesando waypoints...');
+
         const puntosOrdenados = this.ordenarPuntosPorWaypointOrder(entregasConCoords, ruta.waypoint_order);
+
+        // 2. ¡EL ARREGLO ESTÁ AQUÍ! Unimos el origen con los puntos de entrega
+        const puntosCompletos = [origen, ...puntosOrdenados];
+
         const distanciaKm = ruta.legs.reduce((acc, l) => acc + l.distance.value, 0) / 1000;
         const tiempoMin = Math.round(ruta.legs.reduce((acc, l) => acc + l.duration.value, 0) / 60);
 
-        return this.persistirRuta({
-            id_viaje: params.id_viaje,
-            id_region: params.id_region,
-            distanciaKm,
-            tiempoMin,
-            puntos: puntosOrdenados
-        });
+        console.log(`[Ruteo] Guardando ruta de ${distanciaKm.toFixed(2)} km y ${tiempoMin} minutos.`);
+
+        try {
+            return await this.persistirRuta({
+                id_viaje: params.id_viaje,
+                id_region: params.id_region,
+                distanciaKm,
+                tiempoMin,
+                puntos: puntosCompletos // Pasamos el arreglo completo (mínimo 2 puntos)
+            });
+        } catch (error) {
+            console.error('❌ ERROR AL GUARDAR EN BD:', error);
+            return null;
+        }
     }
 
     private async consultarCoordenadasClientes(id_pedidos: string[]): Promise<ClienteCoords[]> {
@@ -199,8 +221,9 @@ export class RuteoService {
             const p = params.puntos[i];
             if (!p) continue;
             await this.dataSource.query(
+                // ¡AQUÍ ESTÁ LA MAGIA! Le agregamos ::float a los parámetros dentro de ST_MakePoint
                 `INSERT INTO puntos_ruta (id_punto, id_ruta, latitud, longitud, ubicacion_punto, orden_parada)
-                 VALUES ($1, $2, $3, $4, ST_SetSRID(ST_MakePoint($4, $3), 4326), $5)`,
+                 VALUES ($1, $2, $3, $4, ST_SetSRID(ST_MakePoint($4::float, $3::float), 4326), $5)`,
                 [randomUUID(), id_ruta, p.latitud, p.longitud, i + 1]
             );
         }

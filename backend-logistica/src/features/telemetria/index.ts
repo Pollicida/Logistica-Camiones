@@ -23,9 +23,9 @@ import { TelemetriaMQTTAdapter } from './infrastructure/mqtt/TelemetriaMQTTAdapt
 export const inicializarTelemetria = (): void => {
 
     // --- Composition Root (Inyección de Dependencias manual) ---
-    const repo      = new TelemetriaTypeORMRepository();
+    const repo = new TelemetriaTypeORMRepository();
     const publisher = new TelemetriaWSAdapter(wsServer);
-    const useCase   = new ProcesarTelemetriaUseCase(repo, publisher);
+    const useCase = new ProcesarTelemetriaUseCase(repo, publisher);
     const mqttAdapter = new TelemetriaMQTTAdapter(useCase);
 
     // 1. Activar la escucha de mensajes MQTT
@@ -94,11 +94,11 @@ export const TelemetriaFacade = {
         if (!rows[0]) return null;
         const row = rows[0];
         return {
-            latitud:     parseFloat(row.latitud),
-            longitud:    parseFloat(row.longitud),
+            latitud: parseFloat(row.latitud),
+            longitud: parseFloat(row.longitud),
             temperatura: parseFloat(row.temperatura_caja),
-            estatus:     true, // Proyección: si hay lectura reciente, el camión estaba activo
-            fecha:       row.fecha_registro,
+            estatus: true, // Proyección: si hay lectura reciente, el camión estaba activo
+            fecha: row.fecha_registro,
         };
     },
 

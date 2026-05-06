@@ -32,14 +32,14 @@ export const buildOperacionesRouter = (
         asyncHandler(pedidoController.crear)
     );
 
-    // RF-06: confirmación manual de entrega de un pedido
+    // RF-06: confirmacion manual de entrega de un pedido
     router.patch(
         '/pedidos/:id/entregar',
         requerirRol(['ADMINISTRADOR']),
         asyncHandler(pedidoController.confirmarEntrega)
     );
 
-    // RF-02: gestión de cola (solo ADMINISTRADOR puede consultar)
+    // RF-02: gestion de cola (solo ADMINISTRADOR puede consultar)
     router.get(
         '/cola',
         requerirRol(['ADMINISTRADOR']),
@@ -52,14 +52,14 @@ export const buildOperacionesRouter = (
         asyncHandler(colaController.listarGrupos)
     );
 
-    // RF-03: sugerencia de asignación (camión + conductor) para un grupo de pedidos
+    // RF-03: sugerencia de asignacion (camion + conductor) para un grupo de pedidos
     router.post(
         '/asignacion/sugerir',
         requerirRol(['ADMINISTRADOR']),
         asyncHandler(asignacionController.sugerir)
     );
 
-    // RF-04: creación y gestión de viajes
+    // RF-04: creacion y gestion de viajes
     router.post(
         '/viajes',
         requerirRol(['ADMINISTRADOR']),
@@ -67,7 +67,7 @@ export const buildOperacionesRouter = (
     );
     router.get(
         '/viajes',
-        requerirRol(['ADMINISTRADOR']),
+        requerirRol(['ADMINISTRADOR', 'OPERADOR']),
         asyncHandler(viajeController.listar)
     );
     router.get(
@@ -86,20 +86,19 @@ export const buildOperacionesRouter = (
         asyncHandler(viajeController.completar)
     );
 
-    // RF-07: pedidos de un viaje específico
+    // RF-07: pedidos de un viaje especifico
     router.get(
         '/viajes/:id/pedidos',
         requerirRol(['ADMINISTRADOR']),
         asyncHandler(viajeController.listarPedidos)
     );
 
-    router.get(
-        '/viajes/detalles/:id',
-        requerirRol(['ADMINISTRADOR', 'CONDUCTOR']),
-        asyncHandler(viajeController.obtenerConductor)
+    // SIMULACION: arranca el script Python de telemetria para un viaje
+    router.post(
+        '/viajes/:id/simular',
+        requerirRol(['ADMINISTRADOR']),
+        asyncHandler(viajeController.simular)
     );
-
-
 
     return router;
 };

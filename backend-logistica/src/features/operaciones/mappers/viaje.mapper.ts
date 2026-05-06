@@ -47,12 +47,14 @@ export interface ViajeView {
     pedidos?: PedidoEnViajeView[];
     camion?: CamionEnViajeView;
     conductor?: ConductorEnViajeView;
+    ruta?: any; // 👉 LÍNEA 1: Le decimos a la vista que puede traer una ruta
 }
 
 export interface ViajeMapperExtras {
     pedidos?: PedidoEnViajeView[];
     camion?: CamionEnViajeView;
     conductor?: ConductorEnViajeView;
+    ruta?: any; // 👉 LÍNEA 2: Le decimos a los extras que acepten la ruta
 }
 
 export const ViajeMapper = {
@@ -72,6 +74,10 @@ export const ViajeMapper = {
         if (extras.pedidos) view.pedidos = extras.pedidos;
         if (extras.camion) view.camion = extras.camion;
         if (extras.conductor) view.conductor = extras.conductor;
+
+        // 👉 LÍNEA 3: ¡Mapeamos la ruta al JSON final!
+        if (extras.ruta) view.ruta = extras.ruta;
+
         return view;
     }
 };

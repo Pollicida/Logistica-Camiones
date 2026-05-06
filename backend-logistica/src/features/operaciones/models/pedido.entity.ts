@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn, PrimaryColumn } from 'typeorm';
 
 const decimalTransformer = {
     to: (value: number | null | undefined): number | null | undefined => value,
@@ -10,7 +10,7 @@ export type PedidoPrioridad = 'NORMAL' | 'ALTA';
 
 @Entity('pedidos')
 export class PedidoEntity {
-    @PrimaryGeneratedColumn('uuid')
+    @PrimaryColumn('uuid')
     id_pedido!: string;
 
     @Column({ type: 'uuid', nullable: true })
