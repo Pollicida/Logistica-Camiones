@@ -164,49 +164,51 @@ services:
     networks:
       - regionNorte
 
-  # api_centro:
-  #   build: 
-  #     context: ./backend-logistica
-  #   container_name: server_central
-  #   ports:
-  #     - "3001:3000" # Exponemos el 3001 a tu compu, pero adentro corre en el 3000
-  #   environment:
-  #     - PORT=3000
-  #     - DATABASE_URL=postgresql://root@lb_centro:26257/logistica_flotilla?sslmode=disable
-  #     - MQTT_BROKER_URL=mqtt://brokercentro:1883
-  #     - REGION_ID=CENTRO
-  #     - JWT_SECRET=complex_secret_key_for_jwt_logistic_system
-  #   volumes:
-  #     - ./backend-logistica/src:/usr/src/app/src
-  #   depends_on:
-  #     lb_centro:
-  #       condition: service_started
-  #     brokercentro:
-  #       condition: service_healthy
-  #   networks:
-  #     - regionCentral
+  api_centro:
+    build: 
+      context: ./backend-logistica
+    container_name: server_central
+    ports:
+      - "3001:3000" # Exponemos el 3001 a tu compu, pero adentro corre en el 3000
+    environment:
+      - PORT=3000
+      - DATABASE_URL=postgresql://root@lb_centro:26257/logistica_flotilla?sslmode=disable
+      - MQTT_BROKER_URL=mqtt://brokercentro:1883
+      - REGION_ID=CENTRO
+      - JWT_SECRET=complex_secret_key_for_jwt_logistic_system
+      - GOOGLE_MAPS_API_KEY=AIzaSyC0y8HD05_K9MCt2IM6srTbpkVL3xcBLS8
+    volumes:
+      - ./backend-logistica/src:/usr/src/app/src
+    depends_on:
+      lb_centro:
+        condition: service_started
+      brokercentro:
+        condition: service_healthy
+    networks:
+      - regionCentral
 
-  # api_sur:
-  #   build: 
-  #     context: ./backend-logistica
-  #   container_name: server_sur
-  #   ports:
-  #     - "3002:3000" # Exponemos el 3002 a tu compu
-  #   environment:
-  #     - PORT=3000
-  #     - DATABASE_URL=postgresql://root@lb_sur:26257/logistica_flotilla?sslmode=disable
-  #     - MQTT_BROKER_URL=mqtt://brokersur:1883
-  #     - REGION_ID=SUR
-  #     - JWT_SECRET=complex_secret_key_for_jwt_logistic_system
-  #   volumes:
-  #     - ./backend-logistica/src:/usr/src/app/src
-  #   depends_on:
-  #     lb_sur:
-  #       condition: service_started
-  #     brokersur:
-  #       condition: service_healthy
-  #   networks:
-  #     - regionSur
+  api_sur:
+    build: 
+      context: ./backend-logistica
+    container_name: server_sur
+    ports:
+      - "3002:3000" # Exponemos el 3002 a tu compu
+    environment:
+      - PORT=3000
+      - DATABASE_URL=postgresql://root@lb_sur:26257/logistica_flotilla?sslmode=disable
+      - MQTT_BROKER_URL=mqtt://brokersur:1883
+      - REGION_ID=SUR
+      - JWT_SECRET=complex_secret_key_for_jwt_logistic_system
+      - GOOGLE_MAPS_API_KEY=AIzaSyC0y8HD05_K9MCt2IM6srTbpkVL3xcBLS8
+    volumes:
+      - ./backend-logistica/src:/usr/src/app/src
+    depends_on:
+      lb_sur:
+        condition: service_started
+      brokersur:
+        condition: service_healthy
+    networks:
+      - regionSur
  
 # ==========================================
 # DEFINICIÓN DE VOLÚMENES Y REDES
